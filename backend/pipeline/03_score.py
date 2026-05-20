@@ -15,7 +15,7 @@ FEATURES = ROOT / "data" / "features"
 OUT = ROOT / "data" / "scored"
 
 # Differentiated weights per entity type per methodology doc
-LEAD_WEIGHTS = {"engagement": 0.80, "account_fit": 0.17, "profile_fit": 0.03}
+LEAD_WEIGHTS = {"engagement": 0.75, "account_fit": 0.15, "profile_fit": 0.10}
 CONTACT_WEIGHTS = {"engagement": 0.60, "account_fit": 0.25, "profile_fit": 0.15}
 
 
