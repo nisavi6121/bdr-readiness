@@ -1,5 +1,8 @@
-# Generated data — reproducible from generate.py + pipeline
-data/
+# Generated data — intermediate files excluded; scored output committed for Vercel deployment
+data/raw/
+data/features/
+data/scored/scored.csv
+data/cleaned/people.csv
 
 # Python
 __pycache__/
