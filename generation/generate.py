@@ -419,7 +419,7 @@ def generate_people(accounts: pd.DataFrame, n_leads: int = 600, n_contacts: int 
     return leads, contacts
 
 
-def generate_campaign_members(leads: pd.DataFrame, contacts: pd.DataFrame, campaigns: pd.DataFrame, n_target: int = 4200) -> pd.DataFrame:
+def generate_campaign_members(leads: pd.DataFrame, contacts: pd.DataFrame, campaigns: pd.DataFrame, accounts: pd.DataFrame, n_target: int = 4200) -> pd.DataFrame:
     camp_ids = campaigns["campaign_id"].tolist()
     camp_types = dict(zip(campaigns["campaign_id"], campaigns["campaign_type"]))
     camp_names = dict(zip(campaigns["campaign_id"], campaigns["campaign_name"]))
@@ -428,14 +428,45 @@ def generate_campaign_members(leads: pd.DataFrame, contacts: pd.DataFrame, campa
     records = []
     cm_id = 1
 
-    # Weight engagements: ICP prospects get more; all Non-Prospect sub-types get low weight
+    # Weight engagements: persona × account quality — they should not be independent.
+    # ICP + named accounts attract more marketing spend → more campaigns targeted at them.
+    # High intent score signals active research → people there show up at events more.
     _np_personas = {p for p in JOB_PERSONAS if p.startswith("Non-Prospect")}
-    lead_weights = np.where(
+
+    # Pre-build account lookup for fast access
+    _acc_index = accounts.set_index("account_id")
+
+    def _acct_quality_multiplier(acc_id):
+        if pd.isna(acc_id) or acc_id not in _acc_index.index:
+            return 0.5  # no account linkage — off targeted lists entirely
+        row = _acc_index.loc[acc_id]
+        m = 1.0
+        if row.get("industry") in ICP_INDUSTRIES:
+            m *= 2.0   # ICP industry → much more campaign targeting
+        if bool(row.get("is_named_account")):
+            m *= 2.5   # named account → ABM, direct invite lists, high-touch sequences
+        intent = float(row.get("intent_score") or 0)
+        m *= (0.5 + intent / 100)  # intent 0→0.5×, intent 50→1.0×, intent 100→1.5×
+        return m
+
+    lead_persona_w = np.where(
         leads["job_persona"].isna() | leads["job_persona"].isin(_np_personas), 0.8, 2.5
     )
-    contact_weights = np.where(
+    lead_acct_w = np.array([_acct_quality_multiplier(aid) for aid in leads["account_id"]])
+    lead_weights = lead_persona_w * lead_acct_w
+
+    contact_persona_w = np.where(
         contacts["job_persona"].isna() | contacts["job_persona"].isin(_np_personas), 0.8, 3.5
     )
+    contact_acct_w = np.array([_acct_quality_multiplier(aid) for aid in contacts["account_id"]])
+    contact_weights = contact_persona_w * contact_acct_w
+
+    # Per-person engagement intensity — ICP+named people also attend more events per campaign.
+    # Stored as a lookup so it doesn't add extra RNG calls inside the main loop.
+    all_acct_w = np.concatenate([lead_acct_w, contact_acct_w])
+    # Normalise to [0,1] range for n_events scaling
+    _aw_max = all_acct_w.max() if all_acct_w.max() > 0 else 1.0
+    engagement_intensity = all_acct_w / _aw_max  # 0 = weakest account, 1 = strongest
 
     # Profile lookup for campaign recency bias (personas 1 and 3)
     lead_profiles = leads.set_index("lead_id")[["job_level", "job_persona"]].to_dict("index")
@@ -480,7 +511,10 @@ def generate_campaign_members(leads: pd.DataFrame, contacts: pd.DataFrame, campa
         elif is_inflated:
             n_events = int(RNG.integers(6, 18))
         else:
-            n_events = int(RNG.integers(1, 4))
+            # Account quality boosts n_events: ICP+named+high-intent people attend more
+            # intensity range [0,1]; low-quality → 1-3 events, high-quality → 1-8 events
+            intensity = engagement_intensity[idx]
+            n_events = int(RNG.integers(1, max(4, int(4 + intensity * 5))))
         # Bias senior genuine prospects and active ICs toward recent campaigns
         profile = lead_profiles.get(pid) or contact_profiles.get(pid) or {}
         jl = str(profile.get("job_level") or "")
@@ -705,7 +739,7 @@ def generate_all(output_dir: Path = RAW_DIR) -> None:
     accounts = generate_accounts(200)
     campaigns = generate_campaigns(60)
     leads, contacts = generate_people(accounts, n_leads=600, n_contacts=400, n_converted=200)
-    campaign_members = generate_campaign_members(leads, contacts, campaigns, n_target=5000)
+    campaign_members = generate_campaign_members(leads, contacts, campaigns, accounts, n_target=5000)
 
     leads, contacts, accounts, campaign_members = _inject_persona_guarantees(
         accounts, leads, contacts, campaigns, campaign_members
