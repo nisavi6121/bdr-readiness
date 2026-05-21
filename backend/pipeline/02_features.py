@@ -99,7 +99,7 @@ def _engagement_features(cm: pd.DataFrame) -> pd.DataFrame:
         last_engagement_date=("response_date", "max"),
         first_engagement_date=("response_date", "min"),
     )
-    overall["days_since_last_engagement"] = (TODAY - overall["last_engagement_date"]).dt.days
+    overall["days_since_last_engagement"] = (TODAY - overall["last_engagement_date"]).dt.days.clip(lower=0)
 
     # Genuine-only aggregates for 30d/90d
     genuine_agg = genuine.groupby("scoring_person_id").agg(
