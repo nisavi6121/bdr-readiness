@@ -75,17 +75,6 @@ Normalised within entity type using **95th-percentile ceiling** — outliers do 
 Sub-signals: ICP Industry (30 pts), Named Account (25 pts), Industry overlap (20 pts), Employee Count (15 pts), Intent Score (10 pts).
 Multiplied by a segment confidence factor based on **account data source quality**:
 
-| Segment | Condition | Multiplier |
-|---|---|---|
-| L1 | Lead matched to account | 0.90 |
-| L2 | No account match; both ZI industry + ZI emp enrichment | 0.65 |
-| L3 | No account match; industry enrichment only | 0.55 |
-| L4 | No account match; emp enrichment only | 0.60 |
-| L5 | No account match; no enrichment | 0.45 |
-| C1 | Contact with lead origin + named account | 1.00 |
-| C2 | Contact with lead origin | 0.85 |
-| C3 | Named account, no lead origin | 0.55 |
-| C4 | No lead origin, no named account | 0.30 |
 
 ### Profile Fit (leads 10%, contacts 15%)
 `(job_level_score + job_persona_score) / 2`
