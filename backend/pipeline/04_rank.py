@@ -67,6 +67,20 @@ def assign_tiers(scored: pd.DataFrame) -> pd.DataFrame:
     # Append soft flag notes to bdr_action for all non-blocked records
     df["bdr_action"] = df.apply(_append_soft_notes, axis=1)
 
+    # Converted leads with a linked contact — suppress from active outreach.
+    # The contact is the canonical record; actioning the lead would duplicate effort.
+    converted_linked = (
+        (df["entity_type"] == "Lead")
+        & df["is_converted"].fillna(False)
+        & df["converted_contact_id"].notna()
+    )
+    df["is_suppressed"] = converted_linked
+    df.loc[converted_linked, "bdr_action"] = (
+        "Do not action — record converted to contact "
+        + df.loc[converted_linked, "converted_contact_id"].astype(str)
+        + " (work the contact record instead)"
+    )
+
     return df
 
 

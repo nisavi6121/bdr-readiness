@@ -80,9 +80,9 @@
     </thead>
     <tbody>
       {% for r in records %}
-      <tr onclick="location.href='/record/{{ r.record_id }}'">
+      <tr onclick="location.href='/record/{{ r.record_id }}'" {% if r.is_suppressed %}style="opacity:.45"{% endif %}>
         <td class="mono" style="color:var(--text3);font-size:.76rem">{{ r.record_id }}</td>
-        <td>{{ r.first_name }} {{ r.last_name }}</td>
+        <td>{{ r.first_name }} {{ r.last_name }}{% if r.is_suppressed %} <span class="auto-tag">converted</span>{% endif %}</td>
         <td style="color:var(--text2);font-size:.8rem">{{ r.entity_type }}</td>
         <td>
           {% if r.tier=='Call Now' %}<span class="badge b-call">Call Now</span>

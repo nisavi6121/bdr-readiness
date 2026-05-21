@@ -383,6 +383,7 @@ def queue():
             "meaningful_30d": int(row.get("meaningful_30d") or 0),
             "days_since": int(days) if days is not None else None,
             "dq_flag_count": int(row.get("dq_flag_count") or 0),
+            "is_suppressed": bool(row.get("is_suppressed", False)),
         }
 
     records = [_rec(r) for _, r in page_df.iterrows()]
