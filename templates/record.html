@@ -19,15 +19,15 @@
 <div class="metrics" style="margin-bottom:18px">
   <div class="metric"><div class="metric-lbl">Final Score</div><div class="metric-val blue">{{ "%.1f"|format(r.final_score) }}</div></div>
   <div class="metric">
-    <div class="metric-lbl">Engagement <span style="color:var(--text3);font-size:.7rem">×0.60</span></div>
+    <div class="metric-lbl">Engagement <span style="color:var(--text3);font-size:.7rem">×{{ "%.2f"|format(r.engagement_weight or 0.60) }}</span></div>
     <div class="metric-val">{{ "%.1f"|format(r.engagement_score) }}</div>
   </div>
   <div class="metric">
-    <div class="metric-lbl">Account Fit <span style="color:var(--text3);font-size:.7rem">×0.22</span></div>
+    <div class="metric-lbl">Account Fit <span style="color:var(--text3);font-size:.7rem">×{{ "%.2f"|format(r.account_fit_weight or 0.22) }}</span></div>
     <div class="metric-val">{{ "%.1f"|format(r.account_fit_score) }}</div>
   </div>
   <div class="metric">
-    <div class="metric-lbl">Profile Fit <span style="color:var(--text3);font-size:.7rem">×0.18</span></div>
+    <div class="metric-lbl">Profile Fit <span style="color:var(--text3);font-size:.7rem">×{{ "%.2f"|format(r.profile_fit_weight or 0.18) }}</span></div>
     <div class="metric-val">{{ "%.1f"|format(r.profile_fit_score) }}</div>
   </div>
   <div class="metric">
@@ -50,8 +50,11 @@
         {% if r.phone %}<div class="kv-row"><span class="kv-key">Phone</span><span class="kv-val">{{ r.phone }}</span></div>{% endif %}
         {% if r.account_name %}<div class="kv-row"><span class="kv-key">Account</span><span class="kv-val">{{ r.account_name }}</span></div>{% endif %}
         {% if r.industry %}<div class="kv-row"><span class="kv-key">Industry</span><span class="kv-val">{{ r.industry }}</span></div>{% endif %}
+        {% if r.country %}<div class="kv-row"><span class="kv-key">Country</span><span class="kv-val">{{ r.country }}</span></div>{% endif %}
+        {% if r.annual_revenue %}<div class="kv-row"><span class="kv-key">Annual Revenue</span><span class="kv-val">${{ "%.1f"|format(r.annual_revenue) }}M</span></div>{% endif %}
         {% if r.job_level %}<div class="kv-row"><span class="kv-key">Job Level</span><span class="kv-val">{{ r.job_level }}</span></div>{% endif %}
         {% if r.job_persona %}<div class="kv-row"><span class="kv-key">Job Persona</span><span class="kv-val">{{ r.job_persona }}</span></div>{% endif %}
+        {% if r.lead_source %}<div class="kv-row"><span class="kv-key">Lead Source</span><span class="kv-val">{{ r.lead_source }}</span></div>{% endif %}
         <div class="kv-row"><span class="kv-key">Segment</span><span class="kv-val" style="color:var(--purple)">{{ r.segment }}</span></div>
         <div class="kv-row"><span class="kv-key">Seg. Multiplier</span><span class="kv-val">{{ "%.2f"|format(r.segment_multiplier or 0) }}</span></div>
       </div>
@@ -70,17 +73,17 @@
       <div class="card-title">Score Breakdown</div>
       <div class="bdown">
         <div class="bd-row">
-          <span class="bd-lbl">Engagement (×0.60)</span>
+          <span class="bd-lbl">Engagement (×{{ "%.2f"|format(r.engagement_weight or 0.60) }})</span>
           <div class="bd-bg"><div class="bd-fill" style="width:{{ r.engagement_score }}%;background:var(--accent)"></div></div>
           <span class="bd-num mono">{{ "%.1f"|format(r.engagement_score) }}</span>
         </div>
         <div class="bd-row">
-          <span class="bd-lbl">Account Fit (×0.22)</span>
+          <span class="bd-lbl">Account Fit (×{{ "%.2f"|format(r.account_fit_weight or 0.22) }})</span>
           <div class="bd-bg"><div class="bd-fill" style="width:{{ r.account_fit_score }}%;background:var(--green)"></div></div>
           <span class="bd-num mono">{{ "%.1f"|format(r.account_fit_score) }}</span>
         </div>
         <div class="bd-row">
-          <span class="bd-lbl">Profile Fit (×0.18)</span>
+          <span class="bd-lbl">Profile Fit (×{{ "%.2f"|format(r.profile_fit_weight or 0.18) }})</span>
           <div class="bd-bg"><div class="bd-fill" style="width:{{ r.profile_fit_score }}%;background:var(--purple)"></div></div>
           <span class="bd-num mono">{{ "%.1f"|format(r.profile_fit_score) }}</span>
         </div>
@@ -106,7 +109,7 @@
       <div class="tbl-wrap" style="border:none">
         <table>
           <thead>
-            <tr><th>Date</th><th>Type</th><th>Status</th><th>Campaign</th></tr>
+            <tr><th>Date</th><th>Type</th><th>Status</th><th>Active</th><th>Campaign</th></tr>
           </thead>
           <tbody>
             {% for e in engagement %}
@@ -116,6 +119,9 @@
               <td>
                 {{ e.member_status }}
                 {% if e.is_automated %}<span class="auto-tag">auto</span>{% endif %}
+              </td>
+              <td class="mono" style="color:{% if e.is_active %}var(--green){% else %}var(--amber){% endif %}">
+                {% if e.is_active %}✓{% else %}✗{% endif %}
               </td>
               <td class="mono" style="color:var(--text3);font-size:.76rem">{{ e.campaign_id }}</td>
             </tr>

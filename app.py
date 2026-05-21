@@ -135,9 +135,13 @@ def _sunburst_html(row: dict) -> str:
     prof_score = float(row.get("profile_fit_score")  or 0)
     final      = float(row.get("final_score")        or 0)
 
-    eng_c  = eng_score  * 0.60
-    acc_c  = acc_score  * 0.22
-    prof_c = prof_score * 0.18
+    # Use per-record weights stored at score time (differentiated by entity type)
+    eng_w  = float(row.get("engagement_weight")  or 0.60)
+    acc_w  = float(row.get("account_fit_weight") or 0.22)
+    prof_w = float(row.get("profile_fit_weight") or 0.18)
+    eng_c  = eng_score  * eng_w
+    acc_c  = acc_score  * acc_w
+    prof_c = prof_score * prof_w
     total  = max(eng_c + acc_c + prof_c, 0.01)
 
     type_keys = ["event","webinar","content_syndication","telemarketing","email","advertisement"]
@@ -166,13 +170,13 @@ def _sunburst_html(row: dict) -> str:
     # Each segment tuple: (label, frac, color, intensity, tooltip_text, center_val, center_sub)
     inner = [
         ("Engagement", eng_c/total, "#4f7cff", eng_score/100,
-         f"Engagement  {eng_score:.1f}/100  →  {eng_c:.1f} pts weighted",
+         f"Engagement  {eng_score:.1f}/100  ×{eng_w:.2f}  →  {eng_c:.1f} pts",
          f"{eng_score:.1f}", "Engagement"),
         ("Account Fit", acc_c/total, "#22c55e", acc_score/100,
-         f"Account Fit  {acc_score:.1f}/100  →  {acc_c:.1f} pts weighted",
+         f"Account Fit  {acc_score:.1f}/100  ×{acc_w:.2f}  →  {acc_c:.1f} pts",
          f"{acc_score:.1f}", "Acct Fit"),
         ("Profile Fit", prof_c/total, "#a78bfa", prof_score/100,
-         f"Profile Fit  {prof_score:.1f}/100  →  {prof_c:.1f} pts weighted",
+         f"Profile Fit  {prof_score:.1f}/100  ×{prof_w:.2f}  →  {prof_c:.1f} pts",
          f"{prof_score:.1f}", "Profile Fit"),
     ]
 
@@ -396,6 +400,7 @@ def record_detail(record_id: str):
                 "campaign_type": _v(row.get("campaign_type")),
                 "member_status": _v(row.get("member_status")),
                 "is_automated": bool(row.get("is_automated")),
+                "is_active": bool(row.get("is_active", True)),
                 "campaign_id": _v(row.get("campaign_id")),
             }
             for _, row in hist.iterrows()
