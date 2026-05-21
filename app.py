@@ -338,6 +338,7 @@ def queue():
     f_industry = request.args.get("industry", "")
     f_min_score = float(request.args.get("min_score", 0) or 0)
     f_named_only = bool(request.args.get("named_only"))
+    f_action = request.args.get("action", "")
     sort_by = request.args.get("sort_by", "tier")
     sort_dir = request.args.get("sort_dir", "asc")
     page = max(1, int(request.args.get("page", 1) or 1))
@@ -353,6 +354,8 @@ def queue():
         df = df[df["named_account"].fillna(False)]
     if f_min_score > 0:
         df = df[df["final_score"] >= f_min_score]
+    if f_action:
+        df = df[df["action_tag"] == f_action]
 
     # Sort
     col, _ = SORT_COLS.get(sort_by, ("tier_sort", True))
@@ -384,6 +387,7 @@ def queue():
             "days_since": int(days) if days is not None else None,
             "dq_flag_count": int(row.get("dq_flag_count") or 0),
             "is_suppressed": bool(row.get("is_suppressed", False)),
+            "action_tag": _v(row.get("action_tag")) or "—",
         }
 
     records = [_rec(r) for _, r in page_df.iterrows()]
@@ -393,6 +397,7 @@ def queue():
         "tier": f_tier, "entity_type": f_entity, "industry": f_industry,
         "min_score": f_min_score if f_min_score else "",
         "named_only": "1" if f_named_only else "",
+        "action": f_action,
         "sort_by": sort_by, "sort_dir": sort_dir,
     }.items() if v}
 
@@ -409,13 +414,14 @@ def queue():
         return "/?" + urlencode({**p, "sort_by": col_key, "sort_dir": new_dir})
 
     industries = sorted(_ranked["industry"].dropna().unique().tolist())
+    action_tags = sorted(_ranked["action_tag"].dropna().unique().tolist())
     return render_template("queue.html",
         records=records, total=total, page=page, total_pages=total_pages,
         prev_url=_purl(page - 1), next_url=_purl(page + 1),
-        stats=_stats(), industries=industries,
+        stats=_stats(), industries=industries, action_tags=action_tags,
         sort_by=sort_by, sort_dir=sort_dir, surl=_surl,
         f_tier=f_tier, f_entity=f_entity, f_industry=f_industry,
-        f_min_score=int(f_min_score), f_named_only=f_named_only,
+        f_min_score=int(f_min_score), f_named_only=f_named_only, f_action=f_action,
     )
 
 

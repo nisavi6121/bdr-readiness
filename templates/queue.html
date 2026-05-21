@@ -46,6 +46,15 @@
       <label>Min score</label>
       <input type="number" name="min_score" value="{{ f_min_score }}" min="0" max="100" style="width:80px"/>
     </div>
+    <div class="fg">
+      <label>Action</label>
+      <select name="action">
+        <option value="" {% if not f_action %}selected{% endif %}>All actions</option>
+        {% for tag in action_tags %}
+        <option value="{{ tag }}" {% if f_action==tag %}selected{% endif %}>{{ tag }}</option>
+        {% endfor %}
+      </select>
+    </div>
     <label class="chk">
       <input type="checkbox" name="named_only" value="1" {% if f_named_only %}checked{% endif %}/>
       Named accounts only
@@ -76,6 +85,7 @@
         {{ sh('meaningful_30d','30d eng.') }}
         {{ sh('days_since','Last eng.') }}
         {{ sh('dq_flag_count','DQ') }}
+        <th>Action</th>
       </tr>
     </thead>
     <tbody>
@@ -103,6 +113,16 @@
         <td class="mono">{{ r.meaningful_30d }}</td>
         <td class="mono" style="color:var(--text3)">{% if r.days_since is not none %}{{ r.days_since }}d{% else %}—{% endif %}</td>
         <td class="mono" style="color:{% if r.dq_flag_count > 0 %}var(--amber){% else %}var(--text3){% endif %}">{{ r.dq_flag_count }}</td>
+        <td>
+          {% if r.action_tag == 'Call / Email' %}<span class="badge b-call">{{ r.action_tag }}</span>
+          {% elif r.action_tag == 'Call only' %}<span class="badge b-call">{{ r.action_tag }}</span>
+          {% elif r.action_tag == 'Follow Up' %}<span class="badge b-follow">{{ r.action_tag }}</span>
+          {% elif r.action_tag == 'Phone / LinkedIn' %}<span class="badge b-follow">{{ r.action_tag }}</span>
+          {% elif r.action_tag == 'Blocked' %}<span class="badge b-flagged">{{ r.action_tag }}</span>
+          {% elif r.action_tag == 'Converted' %}<span class="badge b-nurture">{{ r.action_tag }}</span>
+          {% elif r.action_tag == 'Nurture' %}<span class="badge b-nurture">{{ r.action_tag }}</span>
+          {% else %}<span style="color:var(--text3);font-size:.76rem">{{ r.action_tag }}</span>{% endif %}
+        </td>
       </tr>
       {% else %}
       <tr><td colspan="12" style="text-align:center;padding:32px;color:var(--text3)">No records match the current filters.</td></tr>

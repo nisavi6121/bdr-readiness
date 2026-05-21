@@ -81,7 +81,79 @@ def assign_tiers(scored: pd.DataFrame) -> pd.DataFrame:
         + " (work the contact record instead)"
     )
 
+    # Contact tier promotion — higher tier between lead and contact prevails.
+    # Hard blocker on the contact always supersedes.
+    df = _promote_contacts(df)
+
+    # Re-sort after potential tier changes
+    df["tier_sort"] = df["tier"].map(TIER_ORDER)
+    df = df.sort_values(["tier_sort", "final_score"], ascending=[True, False])
+
+    # Action tag — short label for queue badge and filter
+    df["action_tag"] = df["bdr_action"].apply(_action_tag)
+
     return df
+
+
+def _promote_contacts(df: pd.DataFrame) -> pd.DataFrame:
+    TIER_PRIORITY = {"Call Now": 0, "Follow Up": 1, "Nurture": 2, "Flagged": 3}
+    sup_leads = df[df["is_suppressed"]][["record_id", "converted_contact_id", "tier"]].copy()
+    snap = df.set_index("record_id", drop=False)  # snapshot before mutations
+
+    for _, lead_row in sup_leads.iterrows():
+        cid = lead_row["converted_contact_id"]
+        if pd.isna(cid) or cid not in snap.index:
+            continue
+        contact = snap.loc[cid]
+        if bool(contact["hard_blocker"]):
+            continue  # blocker always supersedes
+        lead_tier = lead_row["tier"]
+        contact_tier = str(contact["tier"])
+        if TIER_PRIORITY.get(lead_tier, 3) >= TIER_PRIORITY.get(contact_tier, 3):
+            continue  # contact already equal or higher priority
+
+        mask = df["record_id"] == cid
+        df.loc[mask, "tier"] = lead_tier
+
+        # Rebuild base action for new tier, respecting soft flags
+        is_opted_out = bool(df.loc[mask, "flag_opted_out"].iloc[0])
+        if lead_tier == "Call Now":
+            base = ("Do not email — call or engage at event only (opted out, non-email signal present)"
+                    if is_opted_out else "Priority outreach — call or email within 24h")
+        else:
+            base = ("Do not email — schedule call or event outreach (opted out, non-email signal present)"
+                    if is_opted_out else "Schedule follow-up within 5 business days")
+
+        existing = str(df.loc[mask, "bdr_action"].iloc[0])
+        notes = (" | Note:" + existing.split(" | Note:", 1)[1]) if " | Note:" in existing else ""
+        df.loc[mask, "bdr_action"] = (
+            base
+            + f" | Promoted from {contact_tier} — linked lead {lead_row['record_id']} scored {lead_tier}"
+            + notes
+        )
+
+    return df
+
+
+def _action_tag(action: str) -> str:
+    a = str(action)
+    if a.startswith("Do not action"):
+        return "Converted"
+    if a.startswith("Review blocker"):
+        return "Blocked"
+    if a.startswith("Priority outreach"):
+        return "Call / Email"
+    if a.startswith("Do not email — call"):
+        return "Call only"
+    if a.startswith("Do not email — schedule"):
+        return "Follow Up"
+    if a.startswith("Email undeliverable"):
+        return "Phone / LinkedIn"
+    if a.startswith("Schedule follow-up"):
+        return "Follow Up"
+    if a.startswith("Add to long-term"):
+        return "Nurture"
+    return "—"
 
 
 def _append_soft_notes(row: pd.Series) -> str:
