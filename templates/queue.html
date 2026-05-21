@@ -59,9 +59,23 @@
   <table>
     <thead>
       <tr>
-        <th>ID</th><th>Name</th><th>Type</th><th>Tier</th>
-        <th>Score</th><th>Confidence</th><th>Account</th>
-        <th>Industry</th><th>Seg.</th><th>30d eng.</th><th>Last eng.</th><th>DQ</th>
+        {% macro sh(key, label) %}
+          <th><a href="{{ surl(key) }}" class="sort-hd{% if sort_by==key %} sort-active{% endif %}">
+            {{ label }}{% if sort_by==key %}{% if sort_dir=='asc' %} ↑{% else %} ↓{% endif %}{% endif %}
+          </a></th>
+        {% endmacro %}
+        {{ sh('record_id','ID') }}
+        {{ sh('name','Name') }}
+        {{ sh('entity_type','Type') }}
+        {{ sh('tier','Tier') }}
+        {{ sh('final_score','Score') }}
+        {{ sh('confidence','Confidence') }}
+        {{ sh('account_name','Account') }}
+        {{ sh('industry','Industry') }}
+        {{ sh('segment','Seg.') }}
+        {{ sh('meaningful_30d','30d eng.') }}
+        {{ sh('days_since','Last eng.') }}
+        {{ sh('dq_flag_count','DQ') }}
       </tr>
     </thead>
     <tbody>

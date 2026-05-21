@@ -315,6 +315,22 @@ def _stats() -> dict:
 PAGE_SIZE = 50
 
 
+SORT_COLS = {
+    "record_id": ("record_id", True),
+    "name": ("last_name", True),
+    "entity_type": ("entity_type", True),
+    "tier": ("tier_sort", True),
+    "final_score": ("final_score", False),
+    "confidence": ("confidence", True),
+    "account_name": ("account_name", True),
+    "industry": ("industry", True),
+    "segment": ("segment", True),
+    "meaningful_30d": ("meaningful_30d", False),
+    "days_since": ("days_since_last_engagement", True),
+    "dq_flag_count": ("dq_flag_count", False),
+}
+
+
 @app.route("/")
 def queue():
     f_tier = request.args.get("tier", "")
@@ -322,6 +338,8 @@ def queue():
     f_industry = request.args.get("industry", "")
     f_min_score = float(request.args.get("min_score", 0) or 0)
     f_named_only = bool(request.args.get("named_only"))
+    sort_by = request.args.get("sort_by", "tier")
+    sort_dir = request.args.get("sort_dir", "asc")
     page = max(1, int(request.args.get("page", 1) or 1))
 
     df = _ranked.copy()
@@ -335,6 +353,13 @@ def queue():
         df = df[df["named_account"].fillna(False)]
     if f_min_score > 0:
         df = df[df["final_score"] >= f_min_score]
+
+    # Sort
+    col, _ = SORT_COLS.get(sort_by, ("tier_sort", True))
+    ascending = (sort_dir == "asc")
+    if col in df.columns:
+        # Secondary sort: always final_score desc to break ties
+        df = df.sort_values([col, "final_score"], ascending=[ascending, False], na_position="last")
 
     total = len(df)
     total_pages = max(1, math.ceil(total / PAGE_SIZE))
@@ -362,21 +387,32 @@ def queue():
 
     records = [_rec(r) for _, r in page_df.iterrows()]
 
-    # Build pagination URLs preserving filters
+    # Build pagination URLs preserving filters + sort
     base_params = {k: v for k, v in {
         "tier": f_tier, "entity_type": f_entity, "industry": f_industry,
         "min_score": f_min_score if f_min_score else "",
         "named_only": "1" if f_named_only else "",
+        "sort_by": sort_by, "sort_dir": sort_dir,
     }.items() if v}
 
     def _purl(p):
         return "/?" + urlencode({**base_params, "page": p})
+
+    def _surl(col_key):
+        """URL to sort by col_key, toggling direction if already active."""
+        if sort_by == col_key:
+            new_dir = "desc" if sort_dir == "asc" else "asc"
+        else:
+            new_dir = "asc" if SORT_COLS.get(col_key, (None, True))[1] else "desc"
+        p = {k: v for k, v in base_params.items() if k not in ("sort_by", "sort_dir", "page")}
+        return "/?" + urlencode({**p, "sort_by": col_key, "sort_dir": new_dir})
 
     industries = sorted(_ranked["industry"].dropna().unique().tolist())
     return render_template("queue.html",
         records=records, total=total, page=page, total_pages=total_pages,
         prev_url=_purl(page - 1), next_url=_purl(page + 1),
         stats=_stats(), industries=industries,
+        sort_by=sort_by, sort_dir=sort_dir, surl=_surl,
         f_tier=f_tier, f_entity=f_entity, f_industry=f_industry,
         f_min_score=int(f_min_score), f_named_only=f_named_only,
     )
