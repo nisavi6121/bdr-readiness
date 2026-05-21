@@ -12,6 +12,8 @@ ROOT = Path(__file__).parent.parent
 RAW_DIR = ROOT / "data" / "raw"
 
 RNG = np.random.default_rng(SEED)
+# Separate sub-RNG for new Appendix A fields — keeps existing RNG stream unchanged
+NEW_FIELDS_RNG = np.random.default_rng(SEED + 1000)
 
 CAMPAIGN_TYPES = ["Event", "Webinar", "Content Syndication", "Telemarketing", "Advertisement", "Email"]
 INDUSTRIES = [
@@ -30,6 +32,13 @@ JOB_PERSONAS = [
 MEMBER_STATUSES = ["Attended", "Responded", "Clicked", "Registered", "No Show", "Sent"]
 
 FREE_EMAIL_DOMAINS = {"gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "protonmail.com"}
+
+COUNTRIES = ["United States", "United Kingdom", "Canada", "Germany", "Australia", "France", "Netherlands", "Sweden"]
+COUNTRY_WEIGHTS = [0.70, 0.08, 0.06, 0.05, 0.04, 0.03, 0.02, 0.02]
+
+LEAD_SOURCES = ["Web", "Event", "Partner Referral", "Cold Call", "Content Syndication",
+                "Employee Referral", "Advertisement", "Webinar", "Trade Show", "Paid Search"]
+LEAD_SOURCE_WEIGHTS = [0.25, 0.15, 0.10, 0.12, 0.10, 0.05, 0.08, 0.07, 0.05, 0.03]
 
 FIRST_NAMES = [
     "James", "Mary", "John", "Patricia", "Robert", "Jennifer", "Michael", "Linda",
@@ -80,6 +89,20 @@ def generate_accounts(n: int = 200) -> pd.DataFrame:
     intent = (RNG.random(n) * 100).round(1)
     domains = [name.lower().replace(" ", "") + ".com" for name in names]
 
+    countries = NEW_FIELDS_RNG.choice(COUNTRIES, n, p=COUNTRY_WEIGHTS)
+    # Annual revenue (USD millions) — size-banded with multiplicative noise
+    rev_per_emp = np.select(
+        [employees < 100, employees < 500, employees < 5000, employees < 25000],
+        [
+            NEW_FIELDS_RNG.uniform(30_000, 100_000, n),
+            NEW_FIELDS_RNG.uniform(100_000, 200_000, n),
+            NEW_FIELDS_RNG.uniform(150_000, 350_000, n),
+            NEW_FIELDS_RNG.uniform(200_000, 500_000, n),
+        ],
+        default=NEW_FIELDS_RNG.uniform(300_000, 800_000, n),
+    )
+    annual_revenue = (employees.astype(float) * rev_per_emp / 1_000_000).round(1)
+
     return pd.DataFrame({
         "account_id": [f"ACC{i:04d}" for i in range(1, n + 1)],
         "account_name": names,
@@ -89,6 +112,8 @@ def generate_accounts(n: int = 200) -> pd.DataFrame:
         "is_named_account": named,
         "account_do_not_contact": dnc,
         "intent_score": intent,
+        "country": countries,
+        "annual_revenue": annual_revenue,
     })
 
 
@@ -289,6 +314,8 @@ def generate_people(accounts: pd.DataFrame, n_leads: int = 600, n_contacts: int 
         None,
     )
 
+    lead_sources = NEW_FIELDS_RNG.choice(LEAD_SOURCES, size=n_leads, p=LEAD_SOURCE_WEIGHTS)
+
     leads = pd.DataFrame({
         "lead_id": lead_ids,
         "first_name": first_names[l_idx],
@@ -304,6 +331,7 @@ def generate_people(accounts: pd.DataFrame, n_leads: int = 600, n_contacts: int 
         "zi_industry": zi_industry_vals,
         "zi_employee_count": zi_employee_vals,
         "created_date": created_dates[l_idx],
+        "lead_source": lead_sources,
         "lead_status": lead_statuses,
         "is_current_mql": is_mql_lead,
         "mql_date": mql_dates_lead,
@@ -509,7 +537,10 @@ def generate_campaign_members(leads: pd.DataFrame, contacts: pd.DataFrame, campa
                     })
                     cm_id += 1
 
-    return pd.DataFrame(records + clones)
+    df = pd.DataFrame(records + clones)
+    # is_active: ~90% True; False simulates records removed from campaign or unsubscribed
+    df["is_active"] = NEW_FIELDS_RNG.random(len(df)) > 0.10
+    return df
 
 
 def _inject_persona_guarantees(

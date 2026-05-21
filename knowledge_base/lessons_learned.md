@@ -24,6 +24,8 @@ DQ-8 is subtle because a BDR looking at a record with 50 campaign membership row
 
 Without entity-type normalisation, contacts would dominate the Call Now tier not because they are better prospects, but because they accumulate more campaign history. Normalising within entity type before weighting means the top-ranked Lead is ranked against other Leads, not against Contacts with 3x the engagement history.
 
+95th-percentile ceiling normalisation was chosen over min-max because engagement data is right-skewed. Min-max would compress the entire middle of the distribution whenever a handful of highly-active outliers exist. The 95th-percentile ceiling treats the top 5% as the reference point (score = 100) and scales everything else proportionally — outliers still score 100, but they no longer collapse the rest of the distribution.
+
 ## Missing Data is Not Disqualification
 
 The instinct to penalise missing data inside the score is wrong for two reasons: (1) the record holder did not choose to have incomplete data — the CRM process failed; (2) penalising it inside the score makes the score uninterpretable. A missing phone number tells you nothing about whether this person wants to buy. The DQ flag and confidence degradation are the right signals. The score should reflect what we know, not punish what we don't.

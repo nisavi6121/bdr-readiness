@@ -1,15 +1,14 @@
 # BDR Readiness Score
 
-A full-stack BDR prioritisation tool: FastAPI backend + React/Vite frontend.
+A Flask/Jinja2 BDR prioritisation tool: four-stage scoring pipeline + live web app.
 
-**Scoring model:** `Final Score = 0.60 × Engagement + 0.22 × Account Fit + 0.18 × Profile Fit`
+**Scoring model — differentiated by entity type:**
+- Leads: `Final Score = 0.75 × Engagement + 0.15 × Account Fit + 0.10 × Profile Fit`
+- Contacts: `Final Score = 0.60 × Engagement + 0.25 × Account Fit + 0.15 × Profile Fit`
 
 ## Prerequisites
 
 - Python 3.10+
-- Node.js 18+ (for frontend)
-
-Install Node.js from https://nodejs.org/ if not present.
 
 ## Quick Start (local dev)
 
@@ -24,27 +23,20 @@ python backend\pipeline\02_features.py
 python backend\pipeline\03_score.py
 python backend\pipeline\04_rank.py
 
-# 3. Start the API
-uvicorn backend.main:app --reload --port 8000
-
-# 4. In a second terminal: install and run frontend
-cd frontend
-npm install
-npm run dev
-# Open http://localhost:5173
+# 3. Start the web app
+python app.py
+# Open http://localhost:5000
 ```
 
-## API Endpoints (http://localhost:8000)
+## Routes (http://localhost:5000)
 
-| Endpoint | Description |
+| Route | Description |
 |---|---|
-| `GET /api/records` | Paginated, filterable scored queue |
-| `GET /api/records/{id}` | Full record detail + score breakdown |
-| `GET /api/records/{id}/engagement` | Campaign engagement history |
-| `GET /api/portfolio` | Tier counts + portfolio stats |
-| `GET /api/knowledge-base` | List KB docs |
-| `GET /api/knowledge-base/{name}` | Render KB markdown |
-| `GET /api/filters/options` | Available filter values |
+| `/` | Redirect to `/queue` |
+| `/queue` | Paginated, filterable BDR priority queue |
+| `/record/<id>` | Full record detail + score breakdown |
+| `/methodology` | Scoring methodology explained |
+| `/knowledge-base` | Analyst discovery notes and design decisions |
 
 ## Project Structure
 
@@ -53,61 +45,78 @@ bdr_readiness_score/
 ├── generation/
 │   └── generate.py          # Synthetic SFDC-style data (SEED=42)
 ├── backend/
-│   ├── main.py              # FastAPI app
-│   ├── models.py            # Pydantic response schemas
 │   └── pipeline/
 │       ├── 01_clean.py      # Entity resolution + DQ flags
 │       ├── 02_features.py   # Per-type engagement features + fit signals
 │       ├── 03_score.py      # 3-component scoring
 │       └── 04_rank.py       # Tier assignment + BDR actions
-├── frontend/
-│   ├── src/pages/           # RankedList, RecordInspector, Methodology, KnowledgeBase
-│   ├── src/components/      # Sunburst chart
-│   └── src/api/client.js    # API fetch wrapper
-├── knowledge_base/          # Markdown docs (design, issues, lessons)
+├── templates/               # Jinja2 HTML (base, queue, record, methodology, kb)
+├── knowledge_base/          # Markdown docs (design, issues, lessons, discovery)
+├── app.py                   # Flask application entry point
 ├── data/
 │   ├── raw/                 # Generated CSVs
 │   ├── cleaned/             # After 01_clean
 │   ├── features/            # After 02_features
 │   └── scored/              # ranked_records.csv (final output)
-├── Dockerfile
+├── vercel.json
 └── requirements.txt
 ```
 
 ## Scoring Model
 
-### Engagement (60%)
+### Engagement (leads 75%, contacts 60%)
 Per campaign type (Event 30%, Webinar 25%, Content Syndication 20%, Telemarketing 10%, Email 10%, Ad 5%).
-Decay: `exp(-ln(2)/30 × age_days)` (30-day half-life).
-Volume: `log(1 + count)`.
-Automation filter: `Sent` status events excluded.
-Normalised within entity type (leads vs contacts calibrated separately).
+Decay: `exp(−ln(2)/30 × age_days)` (30-day half-life).
+Volume: `count / type_cap` (capped per type, not log).
+Automation filter: `Sent` status events excluded from genuine signal.
+Normalised within entity type using **95th-percentile ceiling** — outliers do not compress the rest.
 
-### Account Fit (22%)
-Sub-signals: ICP industry (30 pts), Named account (25 pts), Industry (20 pts), Employees (15 pts), Intent (10 pts).
-Multiplied by a segment confidence factor (C1=1.00 → C4/L5=0.30–0.35).
+### Account Fit (leads 15%, contacts 25%)
+Sub-signals: ICP Industry (30 pts), Named Account (25 pts), Industry overlap (20 pts), Employee Count (15 pts), Intent Score (10 pts).
+Multiplied by a segment confidence factor based on **account data source quality**:
 
-### Profile Fit (18%)
-`(job_level_score + job_persona_score) / 2`.
+| Segment | Condition | Multiplier |
+|---|---|---|
+| L1 | Lead matched to account | 0.90 |
+| L2 | No account match; both ZI industry + ZI emp enrichment | 0.65 |
+| L3 | No account match; industry enrichment only | 0.55 |
+| L4 | No account match; emp enrichment only | 0.60 |
+| L5 | No account match; no enrichment | 0.45 |
+| C1 | Contact with lead origin + named account | 1.00 |
+| C2 | Contact with lead origin | 0.85 |
+| C3 | Named account, no lead origin | 0.55 |
+| C4 | No lead origin, no named account | 0.30 |
+
+### Profile Fit (leads 10%, contacts 15%)
+`(job_level_score + job_persona_score) / 2`
+Job level: C-Level 1.00 · VP 0.85 · Director 0.70 · Manager 0.50 · IC 0.30
+Job persona: CISO 1.00 · Technical Buyer 0.85 · Financial Buyer 0.70 · Influencer 0.50 · Non-Prospect 0.00
 Missing values imputed with within-entity-type median (never population mean).
 
 ### Tiers
-- **Call Now** (≥35): priority outreach within 24h
-- **Follow Up** (≥22): schedule within 5 business days
-- **Nurture** (<22): long-term sequence
-- **Flagged** (hard blocker regardless of score): review before outreach
 
-### Hard Blockers
-Email opt-out, bounced email, no longer with company, account do-not-contact, Competitor/Employee/Vendor persona.
+| Tier | Lead threshold | Contact threshold | Action |
+|---|---|---|---|
+| Call Now | ≥ 65 | ≥ 70 | Priority outreach within 24h |
+| Follow Up | ≥ 35 | ≥ 40 | Schedule within 5 business days |
+| Nurture | < 35 | < 40 | Long-term sequence |
+| Flagged | hard blocker | hard blocker | Review before any outreach |
 
-## Docker / Cloud Run
+Automation-inflated records (automation_share > 70%) are capped at Follow Up regardless of score.
+
+### Hard Blockers (Flagged tier)
+- Non-Prospect persona (Competitor, Employee, Vendor)
+- Account-level do-not-contact
+- No-longer-with-company
+
+### Soft Flags (do not block tier, inform BDR action)
+- Email opted-out → no email channel; call or event outreach only
+- Bounced email → use phone or LinkedIn
+
+## Vercel Deployment
+
+The app deploys to Vercel via `@vercel/python`. `ranked_records.csv` and `campaign_members.csv` are pre-committed so no pipeline runs at deploy time.
 
 ```bash
-docker build -t bdr-score .
-docker run -p 8080:8080 bdr-score
-```
-
-Deploy to Cloud Run:
-```bash
-gcloud run deploy bdr-score --source . --platform managed --region us-central1 --allow-unauthenticated
+vercel --prod
 ```
