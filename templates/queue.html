@@ -101,7 +101,7 @@
         <td style="color:var(--text2);font-size:.8rem">{{ r.industry or '—' }}</td>
         <td class="mono" style="color:var(--purple);font-size:.76rem">{{ r.segment or '—' }}</td>
         <td class="mono">{{ r.meaningful_30d }}</td>
-        <td class="mono" style="color:var(--text3)">{% if r.days_since %}{{ r.days_since }}d{% else %}—{% endif %}</td>
+        <td class="mono" style="color:var(--text3)">{% if r.days_since is not none %}{{ r.days_since }}d{% else %}—{% endif %}</td>
         <td class="mono" style="color:{% if r.dq_flag_count > 0 %}var(--amber){% else %}var(--text3){% endif %}">{{ r.dq_flag_count }}</td>
       </tr>
       {% else %}
