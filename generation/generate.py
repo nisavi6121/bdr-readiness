@@ -103,6 +103,8 @@ def generate_accounts(n: int = 200) -> pd.DataFrame:
     )
     annual_revenue = (employees.astype(float) * rev_per_emp / 1_000_000).round(1)
 
+    is_icp_qualified = pd.Series(industries).isin(ICP_INDUSTRIES).values
+
     return pd.DataFrame({
         "account_id": [f"ACC{i:04d}" for i in range(1, n + 1)],
         "account_name": names,
@@ -110,6 +112,7 @@ def generate_accounts(n: int = 200) -> pd.DataFrame:
         "industry": industries,
         "employee_count": employees,
         "is_named_account": named,
+        "is_icp_qualified": is_icp_qualified,
         "account_do_not_contact": dnc,
         "intent_score": intent,
         "country": countries,
@@ -316,12 +319,23 @@ def generate_people(accounts: pd.DataFrame, n_leads: int = 600, n_contacts: int 
 
     lead_sources = NEW_FIELDS_RNG.choice(LEAD_SOURCES, size=n_leads, p=LEAD_SOURCE_WEIGHTS)
 
+    # company: self-reported messy field — ~70% matches account_name with noise, ~30% blank or free-text
+    _acc_name_for_lead = [acc_names.get(aid, "") for aid in lead_acc_ids]
+    _noise_opts = ["Inc.", "LLC", "Corp", "Ltd", "& Co", "Group", ""]
+    company_vals = [
+        (name + " " + RNG.choice(_noise_opts)).strip() if name and RNG.random() < 0.70
+        else (RNG.choice(["", name, name.split()[0]]) if name else "")
+        for name in _acc_name_for_lead
+    ]
+    company_vals = [v if v else None for v in company_vals]
+
     leads = pd.DataFrame({
         "lead_id": lead_ids,
         "first_name": first_names[l_idx],
         "last_name": last_names[l_idx],
         "email": emails[l_idx],
         "title": titles_raw[l_idx],
+        "company": company_vals,
         "job_level": job_levels[l_idx],
         "job_persona": job_personas_raw[l_idx],
         "phone": phones_raw[l_idx],
@@ -399,12 +413,15 @@ def generate_people(accounts: pd.DataFrame, n_leads: int = 600, n_contacts: int 
             conv_date = (base_date + pd.Timedelta(days=int(RNG.integers(365, 730)))).date().isoformat()
             leads.iloc[li, leads.columns.get_loc("mql_date")] = conv_date
 
+    contacts["has_lead_origin"] = contacts["primary_lead_id"].notna()
+
     return leads, contacts
 
 
 def generate_campaign_members(leads: pd.DataFrame, contacts: pd.DataFrame, campaigns: pd.DataFrame, n_target: int = 4200) -> pd.DataFrame:
     camp_ids = campaigns["campaign_id"].tolist()
     camp_types = dict(zip(campaigns["campaign_id"], campaigns["campaign_type"]))
+    camp_names = dict(zip(campaigns["campaign_id"], campaigns["campaign_name"]))
     camp_dates = dict(zip(campaigns["campaign_id"], pd.to_datetime(campaigns["start_date"])))
 
     records = []
@@ -509,8 +526,10 @@ def generate_campaign_members(leads: pd.DataFrame, contacts: pd.DataFrame, campa
                 "entity_id": pid,
                 "entity_type": ptype,
                 "campaign_id": cid,
+                "campaign_name": camp_names[cid],
                 "campaign_type": ctype,
                 "member_status": status,
+                "is_responded": status != "Sent",
                 "response_date": response_date.date().isoformat(),
                 "is_automated": bool(is_auto),
             })
@@ -533,8 +552,10 @@ def generate_campaign_members(leads: pd.DataFrame, contacts: pd.DataFrame, campa
                         "entity_id": other_id,
                         "entity_type": "Lead" if other_id.startswith("L") else "Contact",
                         "campaign_id": rec["campaign_id"],
+                        "campaign_name": rec["campaign_name"],
                         "campaign_type": rec["campaign_type"],
                         "member_status": rec["member_status"],
+                        "is_responded": rec["is_responded"],
                         "response_date": rec["response_date"],
                         "is_automated": rec["is_automated"],
                     })

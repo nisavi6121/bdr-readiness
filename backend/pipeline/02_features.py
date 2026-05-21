@@ -150,40 +150,29 @@ def _account_fit_features(people: pd.DataFrame) -> pd.DataFrame:
         default=0.25,
     )
 
-    # 9-segment framework — account data source quality only, no MQL status
-    # Leads: L1 (matched account), L2 (no match, industry+emp enrichment), L3 (industry only),
-    #        L4 (emp count only), L5 (no account, no enrichment)
-    # Contacts: C1 (native account, well populated), C2 (native account, thinly populated),
-    #           C3 (no account, enrichment available), C4 (no account, no enrichment)
+    # 6-segment framework — account data source quality only, no MQL status
+    # Leads:    L1 (matched to CRM account), L2 (no match, enrichment available), L3 (no match, no enrichment)
+    # Contacts: C1 (has lead origin), C2 (no lead origin, enrichment available), C3 (no lead origin, no enrichment)
+    # Named account flag is already a sub-signal in account_fit_raw — excluded from segment to avoid double-counting
     def _segment(row):
         if row["entity_type"] == "Lead":
             if pd.notna(row.get("account_id")):
                 return "L1"
-            has_ind = pd.notna(row.get("zi_industry")) or pd.notna(row.get("industry"))
-            has_emp = pd.notna(row.get("zi_employee_count")) or pd.notna(row.get("employee_count"))
-            if has_ind and has_emp:
-                return "L2"
-            elif has_ind:
-                return "L3"
-            elif has_emp:
-                return "L4"
-            else:
-                return "L5"
+            has_enrichment = (pd.notna(row.get("zi_industry")) or pd.notna(row.get("industry"))
+                              or pd.notna(row.get("zi_employee_count")) or pd.notna(row.get("employee_count")))
+            return "L2" if has_enrichment else "L3"
         else:  # Contact
-            has_origin = pd.notna(row.get("lead_origin_id"))
-            if has_origin and bool(row.get("named_account_flag")):
+            if pd.notna(row.get("lead_origin_id")):
                 return "C1"
-            elif has_origin:
-                return "C2"
-            elif bool(row.get("named_account_flag")):
-                return "C3"
-            else:
-                return "C4"
+            has_enrichment = (bool(row.get("named_account_flag"))
+                              or pd.notna(row.get("industry")) or pd.notna(row.get("employee_count")))
+            return "C2" if has_enrichment else "C3"
 
-    # Multipliers per doc — reflect data source confidence, not prospect quality
+    # Multipliers — reflect data source confidence, not prospect quality
+    # Contacts get C1=1.00 because they are native CRM records linked to known accounts
     SEGMENT_MULTIPLIERS = {
-        "L1": 0.90, "L2": 0.65, "L3": 0.55, "L4": 0.60, "L5": 0.45,
-        "C1": 1.00, "C2": 0.85, "C3": 0.55, "C4": 0.30,
+        "L1": 0.90, "L2": 0.55, "L3": 0.45,
+        "C1": 1.00, "C2": 0.55, "C3": 0.45,
     }
 
     people["segment"] = people.apply(_segment, axis=1)
@@ -192,9 +181,8 @@ def _account_fit_features(people: pd.DataFrame) -> pd.DataFrame:
     # Raw account fit sub-signals (0-100 scale before multiplier)
     intent_raw = people.get("account_intent_score", pd.Series(0.0, index=people.index)).fillna(0).clip(0, 100)
     people["account_fit_raw"] = (
-        people["icp_flag"].astype(float) * 30
+        people["icp_flag"].astype(float) * 50
         + people["named_account_flag"].astype(float) * 25
-        + people["icp_flag"].astype(float) * 20  # industry overlap (ICP = named industry tier)
         + people["employee_fit"] * 15
         + (intent_raw / 100) * 10
     )

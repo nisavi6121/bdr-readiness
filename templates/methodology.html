@@ -37,20 +37,34 @@
   <h3>Automation filter</h3>
   <p>Events with <code>member_status = Sent</code> are excluded before computing the per-type
   signal. This prevents automation-inflated histories (DQ-8) from inflating the score.</p>
+  <h3>Raw signal to normalised score</h3>
+  <p>The per-type contributions are summed into a single <code>raw_engagement_signal</code> value.
+  Because recency and volume are <em>multiplicative</em>, a record that maxes out both dimensions
+  across multiple high-weight campaign types can accumulate a raw signal several times larger than
+  the next-best record — Robert Sanchez's raw signal of 4 034 is 2.76× the Lead ceiling of 1 461.</p>
+  <p>The raw signal distribution is heavily right-skewed and bimodal:</p>
+  <ul>
+    <li><strong>~52% of leads / ~45% of contacts</strong> have a raw signal ≤ 1 — essentially no genuine engagement</li>
+    <li>A dead zone from roughly 10–200: very few records sit here because the multiplicative formula
+    means weak recency <em>or</em> weak volume wipes out a campaign type's contribution entirely</li>
+    <li>The engaged cluster (200–1 000+) represents records that hit both dimensions across at least one high-weight type</li>
+    <li>~5% exceed the ceiling and are clipped to 100</li>
+  </ul>
+  <p>This shape is why the normalisation method matters. A pure percentile rank would assign the
+  median record a score of 50 — implying average engagement — when its actual raw signal is near zero.
+  The 95th-percentile ceiling correctly gives that record ~0, preserving the true meaning of the signal.</p>
   <h3>Lead vs Contact fairness</h3>
-  <p>Engagement signals are normalised <em>within</em> entity type using a <strong>95th-percentile
-  ceiling</strong>. The top 5% of values are treated as the ceiling (score = 100); everything else
-  is scaled proportionally. This prevents a handful of highly-active outliers from compressing the
-  rest of the distribution, while still separating low- from high-engagement records.</p>
+  <p>Normalisation is done <em>within</em> entity type separately (Lead ceiling ≈ 1 461, Contact ceiling ≈ 1 825
+  in the current dataset). This means a lead is only compared against other leads, and a contact against
+  other contacts — the two populations are not competing against each other for the top scores.</p>
 
   <h2>Component 2 — Account Fit (leads 15%, contacts 25%)</h2>
   <p>Account fit measures how well the record's company matches the ICP, weighted by a segment
   multiplier encoding data confidence.</p>
   <h3>Sub-signals</h3>
   <ul>
-    <li><strong>ICP Industry:</strong> 30 pts — Software, Financial Services, Healthcare, Telecom, Energy</li>
+    <li><strong>ICP Industry:</strong> 50 pts — Software, Financial Services, Healthcare, Telecom, Energy</li>
     <li><strong>Named Account:</strong> 25 pts — pre-identified strategic target</li>
-    <li><strong>Industry match:</strong> 20 pts — overlaps ICP when ICP flag is set</li>
     <li><strong>Employee Count:</strong> 15 pts — 500–10 000 = full; 100–50 000 = 0.65×; else 0.25×</li>
     <li><strong>Intent Score:</strong> 10 pts — third-party account-level intent (0–100 normalised)</li>
   </ul>
@@ -58,16 +72,15 @@
   <p>Segment reflects how reliable the account fit signal is, not the intrinsic worth of the record.
   Lead segments are based on ZoomInfo enrichment availability; contact segments on lead origin linkage.</p>
   <ul>
-    <li><strong>L1</strong> (lead matched to account): 0.90</li>
-    <li><strong>L2</strong> (no account match; both ZI industry + ZI employee enrichment): 0.65</li>
-    <li><strong>L3</strong> (no account match; industry enrichment only): 0.55</li>
-    <li><strong>L4</strong> (no account match; employee enrichment only): 0.60</li>
-    <li><strong>L5</strong> (no account match; no enrichment at all): 0.45</li>
-    <li><strong>C1</strong> (contact with lead origin + named account): 1.00</li>
-    <li><strong>C2</strong> (contact with lead origin): 0.85</li>
-    <li><strong>C3</strong> (named account, no lead origin): 0.55</li>
-    <li><strong>C4</strong> (no lead origin, no named account): 0.30</li>
+    <li><strong>L1</strong> (lead matched to a CRM account): 0.90</li>
+    <li><strong>L2</strong> (no CRM match; enrichment available): 0.55</li>
+    <li><strong>L3</strong> (no CRM match; no enrichment): 0.45</li>
+    <li><strong>C1</strong> (has lead origin — native CRM record, full account linkage): 1.00</li>
+    <li><strong>C2</strong> (no lead origin; enrichment available): 0.55</li>
+    <li><strong>C3</strong> (no lead origin; no enrichment): 0.45</li>
   </ul>
+  <p>Named account flag is already a sub-signal in the raw account fit score (25 pts) and is excluded
+  from segment assignment to avoid double-counting.</p>
 
   <h2>Component 3 — Profile Fit (leads 10%, contacts 15%)</h2>
   <div class="formula">Profile Fit = (job_level_score + job_persona_score) / 2</div>

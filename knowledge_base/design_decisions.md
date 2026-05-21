@@ -27,21 +27,34 @@ Volume is capped per campaign type (Event=3, Webinar=5, Email=10, etc.) and scor
 
 Engagement signals are normalised within entity type using a 95th-percentile ceiling rather than min-max. The 95th percentile becomes the "perfect score" (100); everything else is scaled proportionally and clipped to 100. This prevents a small number of highly-active outliers from compressing the entire distribution, which is a known failure mode of min-max normalisation on right-skewed engagement data.
 
+### Raw signal distribution shape
+
+The `raw_engagement_signal` distribution is heavily right-skewed and bimodal in practice:
+
+- **~52% of leads / ~45% of contacts** have raw signal ≤ 1 (no genuine engagement)
+- A **dead zone from ~10–200**: very few records sit here. The multiplicative formula (`type_weight × recency_score × volume_score`) means weak recency *or* weak volume zeros out that campaign type's contribution entirely. A record needs both dimensions non-trivial across at least one high-weight type to escape near-zero.
+- **The engaged cluster** (200–1 000+): records that hit strong recency and volume across multiple campaign types, compounding quickly due to the multiplicative structure
+- **~5% exceed the ceiling** and are clipped to 100 (32 leads, 20 contacts in the synthetic dataset)
+
+Current dataset ceilings: Lead ≈ 1 461, Contact ≈ 1 825.
+
+### Why not a pure percentile rank?
+
+A pure percentile rank assigns the median record a score of 50 — implying average engagement — when its actual raw signal is near zero. The 95th-percentile ceiling correctly gives that record ~0, preserving the signal's true meaning. Additionally, pure percentile ranks shift every record's score when new records are added; the ceiling method is stable unless the population's overall distribution shifts substantially.
+
 ## Automation Filter
 
 Events with `member_status = Sent` are excluded from the genuine engagement signal. This is the primary control for DQ-8 (automation-inflated engagement). Records where automation share exceeds 70% are additionally capped at Follow Up tier regardless of final score — the signal is unreliable enough that Call Now designation should not rest on it.
 
 ## Segment Multipliers — Account Data Source Quality
 
-The 9-segment framework (C1-C4, L1-L5) encodes data confidence, not prospect quality. Lead segments are defined entirely by account data source availability:
+The 9-segment framework (C1-C4, L1-L5) encodes data confidence, not prospect quality. Both lead and contact segments use the same 3-level ladder — CRM linkage → enrichment available → nothing:
 
-- L1: lead matched to an account record in CRM (highest confidence)
-- L2: no match, but both ZoomInfo industry and employee enrichment are present
-- L3: no match, industry enrichment only
-- L4: no match, employee count enrichment only
-- L5: no account match, no enrichment (lowest confidence)
+- L1 / C1: linked to a CRM account record (lead: account_id present; contact: lead_origin_id present). C1 gets 1.00 because contacts are native CRM records on known accounts; L1 gets 0.90 to reflect that lead-to-account matching can have noise.
+- L2 / C2: no CRM link, but firmographic enrichment available (ZoomInfo industry/employee for leads; named account flag or industry/employee for contacts). Multiplier 0.55.
+- L3 / C3: no CRM link, no enrichment. Multiplier 0.45.
 
-Contact segments use lead origin linkage and named account status (C1 = both present, C4 = neither). MQL status was explicitly excluded from segmentation — it reflects legacy process state, not data confidence.
+Named account flag is already a 25-pt sub-signal in account_fit_raw — it is excluded from segment assignment to avoid double-counting. MQL status is also excluded — it reflects legacy process state, not data confidence.
 
 ## Differentiated Tier Thresholds
 

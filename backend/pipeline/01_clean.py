@@ -48,6 +48,7 @@ def _normalize_accounts(df: pd.DataFrame) -> pd.DataFrame:
     return df.rename(columns={
         "is_named_account": "named_account",
         "intent_score": "account_intent_score",
+        "account_do_not_contact": "account_do_not_contact",  # keep as-is
     })
 
 
@@ -143,6 +144,9 @@ def attach_engagement_links(people: pd.DataFrame, campaign_members: pd.DataFrame
     cm = campaign_members.rename(columns={"cm_id": "campaign_member_id", "entity_id": "person_record_id"})
     id_map = people.set_index("record_id")["scoring_person_id"].to_dict()
     cm["scoring_person_id"] = cm["person_record_id"].map(id_map).fillna(cm["person_record_id"])
+    # Ensure is_responded is present (fallback if generator predates this field)
+    if "is_responded" not in cm.columns:
+        cm["is_responded"] = cm["member_status"] != "Sent"
     return cm
 
 
