@@ -320,11 +320,12 @@ def generate_people(accounts: pd.DataFrame, n_leads: int = 600, n_contacts: int 
     lead_sources = NEW_FIELDS_RNG.choice(LEAD_SOURCES, size=n_leads, p=LEAD_SOURCE_WEIGHTS)
 
     # company: self-reported messy field — ~70% matches account_name with noise, ~30% blank or free-text
+    # Uses NEW_FIELDS_RNG to preserve main RNG stream reproducibility
     _acc_name_for_lead = [acc_names.get(aid, "") for aid in lead_acc_ids]
     _noise_opts = ["Inc.", "LLC", "Corp", "Ltd", "& Co", "Group", ""]
     company_vals = [
-        (name + " " + RNG.choice(_noise_opts)).strip() if name and RNG.random() < 0.70
-        else (RNG.choice(["", name, name.split()[0]]) if name else "")
+        (name + " " + NEW_FIELDS_RNG.choice(_noise_opts)).strip() if name and NEW_FIELDS_RNG.random() < 0.70
+        else (NEW_FIELDS_RNG.choice(["", name, name.split()[0] if name else ""]))
         for name in _acc_name_for_lead
     ]
     company_vals = [v if v else None for v in company_vals]
