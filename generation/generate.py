@@ -483,7 +483,10 @@ def generate_campaign_members(leads: pd.DataFrame, contacts: pd.DataFrame, campa
         for cid in chosen_camps:
             ctype = camp_types[cid]
             camp_date = camp_dates[cid]
-            response_date = camp_date + pd.Timedelta(days=int(RNG.integers(0, 30)))
+            response_date = min(
+                camp_date + pd.Timedelta(days=int(RNG.integers(0, 30))),
+                pd.Timestamp.today().normalize(),
+            )
 
             if is_inflated and RNG.random() < 0.82:
                 status = "Sent"
@@ -579,7 +582,10 @@ def _inject_persona_guarantees(
         for cid in cids:
             ctype = camp_type_map[cid]
             base = camp_ts[cid]
-            rdate = base + pd.Timedelta(days=int(RNG.integers(1, 8)))
+            rdate = min(
+                base + pd.Timedelta(days=int(RNG.integers(1, 8))),
+                pd.Timestamp.today().normalize(),
+            )
             extra.append({
                 "cm_id": f"CM{nonlocal_id[0]:06d}",
                 "entity_id": pid,
