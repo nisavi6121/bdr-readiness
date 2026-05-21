@@ -462,6 +462,11 @@ def methodology():
     return render_template("methodology.html")
 
 
+@app.route("/guide")
+def guide():
+    return render_template("guide.html")
+
+
 @app.route("/knowledge-base")
 def kb_index():
     docs = [p.stem for p in sorted(KB_DIR.glob("*.md"))]
